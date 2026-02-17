@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>そだちAI (SODACHI AI) — AIネイティブ保育プラットフォーム</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','Hiragino Sans','Yu Gothic',system-ui,sans-serif;background:#F9FAFB}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.shake{animation:shake .4s ease}
+input:focus{outline:none;border-color:#10B981!important;box-shadow:0 0 0 3px rgba(16,185,129,.15)}
+button{font-family:inherit}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:3px}
+#lf{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#064E3B,#047857);color:#fff;font-size:18px;z-index:9999;flex-direction:column;gap:16px}
+#lf .sp{width:40px;height:40px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+.toast{position:fixed;top:24px;right:24px;padding:14px 24px;border-radius:12px;color:#fff;font-weight:600;font-size:14px;z-index:10000;animation:fadeIn .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9000;animation:fadeIn .2s ease}
+.modal-box{background:#fff;border-radius:20px;padding:32px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.tab-active{background:#10B981!important;color:#fff!important;border-color:#10B981!important}
+</style>
+</head>
+<body>
+<div id="lf"><div class="sp"></div><div>そだちAI を読み込み中...</div></div>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useCallback,useMemo}=React;
+document.getElementById('lf').style.display='none';
+
+// ============================================================
+// そだちAI v2.0 — Full Interactive Prototype
+// ============================================================
+
+const USERS=[
+  {email:"s_tahara@skillupai.com",name:"田原 眞一",org:"スキルアップNeXt"},
+  {email:"katokato666@yahoo.co.jp",name:"加藤",org:""},
+  {email:"wataru.yamaguchi.dp@fujifilm.com",name:"山口 渉",org:"FBIJ"},
+  {email:"tetsuya.kanome.wz@fujifilm.com",name:"鹿目 哲也",org:"FBIJ"},
+  {email:"takashi.ishii.ek@fujifilm.com",name:"石井 隆",org:"FBIJ"},
+];
+const PW="12345678";
+
+const C={
+  primary:"#10B981",primaryDark:"#059669",primaryLight:"#D1FAE5",
+  accent:"#F59E0B",accentLight:"#FEF3C7",
+  danger:"#EF4444",dangerLight:"#FEE2E2",
+  info:"#3B82F6",infoLight:"#DBEAFE",
+  purple:"#8B5CF6",purpleLight:"#EDE9FE",
+  g50:"#F9FAFB",g100:"#F3F4F6",g200:"#E5E7EB",g300:"#D1D5DB",
+  g500:"#6B7280",g700:"#374151",g900:"#111827",
+};
+
+// ── Child Data ──
+const CHILDREN=[
+  {id:1,name:"田中 ゆうと",age:4,cls:"ひまわり組",photo:"🧒",arrived:true,time:"8:12",parent:"母",hr:92,spo2:98,temp:36.4},
+  {id:2,name:"佐藤 あおい",age:3,cls:"ひまわり組",photo:"👧",arrived:true,time:"8:25",parent:"父",hr:88,spo2:99,temp:36.6},
+  {id:3,name:"鈴木 はると",age:4,cls:"ひまわり組",photo:"🧒",arrived:true,time:"8:31",parent:"祖母",hr:95,spo2:97,temp:36.3},
+  {id:4,name:"高橋 ひなた",age:3,cls:"ひまわり組",photo:"👧",arrived:true,time:"8:45",parent:"母",hr:90,spo2:98,temp:36.5},
+  {id:5,name:"伊藤 そうた",age:4,cls:"ひまわり組",photo:"🧒",arrived:false,time:null,parent:null,hr:null,spo2:null,temp:null},
+  {id:6,name:"渡辺 めい",age:3,cls:"ひまわり組",photo:"👧",arrived:true,time:"9:02",parent:"父",hr:87,spo2:99,temp:36.7},
+  {id:7,name:"山本 りく",age:5,cls:"さくら組",photo:"🧒",arrived:true,time:"8:08",parent:"母",hr:91,spo2:98,temp:36.2},
+  {id:8,name:"中村 さくら",age:5,cls:"さくら組",photo:"👧",arrived:true,time:"8:20",parent:"母",hr:89,spo2:99,temp:36.5},
+];
+
+// Per-child journal data
+const JOURNALS={
+  1:{
+    diary:"今日のゆうとくんは、朝の自由遊びの時間にブロックで大きなお城を作っていました。「先生、見て！お城できたよ！」と嬉しそうに教えてくれました。\n\nお絵描きの時間には、クレヨンを使って家族の絵を描きました。「これはパパ、これはママ、これはぼく！」と一つひとつ説明してくれました。\n\n外遊びでは、佐藤あおいちゃんと一緒に砂場で遊び、山を作って楽しんでいました。\n\n給食はほぼ完食（ごはん90%、主菜80%）。おかわりも1回しました。",
+    parent:"今日のゆうとくんは元気いっぱいに過ごしました🌟\n\n朝はブロックで大きなお城を作り、とても満足そうでした。お絵描きではご家族の絵を描いて、一人ひとり丁寧に説明してくれましたよ。\n\nお外では佐藤あおいちゃんと砂場で仲良く遊んでいました😊",
+    photos:["🎨 お絵描き","🏗 ブロック","⛱ 砂場"],
+    photoBg:["#FFE4C4","#B0E0E6","#F0E68C"],
+    meal:{r:90,m:80,s:70,sp:100}
+  },
+  2:{
+    diary:"あおいちゃんは朝から笑顔で登園しました。朝の会では元気に「おはようございます！」とご挨拶。\n\nお絵描きの時間にはピンクのクレヨンでお花をたくさん描いていました。「お花畑だよ！」と嬉しそう。\n\nお外遊びでは、ブランコがお気に入りで「もっと高く〜！」と楽しんでいました。\n\n給食はお魚が少し苦手な様子でしたが、お味噌汁は完食しました。",
+    parent:"あおいちゃん、今日も元気に過ごしましたよ🌸\n\nお絵描きではきれいなお花畑を描いてくれました。ブランコも大好きで、笑顔いっぱいの1日でした！\n\nお魚は少し残しましたが、他はよく食べています😊",
+    photos:["🌸 お花絵","🎠 ブランコ","🍱 給食"],
+    photoBg:["#FFB6C1","#E6E6FA","#98FB98"],
+    meal:{r:85,m:60,s:75,sp:95}
+  },
+  3:{
+    diary:"はるとくんは今日、積み木で高いタワーを作ることに挑戦していました。何度も崩れましたが、諦めずに最後には自分の背の高さまで積み上げることができました！\n\nお外では鬼ごっこのリーダーを務め、「こっちだよ！」とみんなをまとめていました。\n\nお昼寝の時間にはなかなか寝付けず、先生のそばで絵本を静かに見ていました。\n\n給食は完食。おかわりも2回しました。",
+    parent:"はるとくん、今日は積み木で大きなタワーに挑戦しました🏗\n\n何度崩れてもめげずに頑張り、最後は自分の背の高さまで完成！お外では鬼ごっこでリーダーシップを発揮していましたよ💪\n\nたくさん食べて元気いっぱいです",
+    photos:["🏗 積み木","🏃 鬼ごっこ","📖 絵本"],
+    photoBg:["#DEB887","#87CEEB","#FFDAB9"],
+    meal:{r:100,m:95,s:80,sp:100}
+  },
+  4:{
+    diary:"ひなたちゃんは今日、おままごとコーナーでお料理ごっこを楽しんでいました。「はい、どうぞ！」とお友達にお料理を配って回る姿がとても微笑ましかったです。\n\n制作の時間には折り紙で犬を上手に折ることができました。\n\n午後はお昼寝のあとにおやつを食べて、粘土遊びに集中していました。\n\n給食ではアレルギー対応食（卵不使用）を提供。よく食べていました。",
+    parent:"ひなたちゃん、今日はおままごとでたくさんお料理を作ってお友達に配ってくれました🍳\n\n折り紙では犬を上手に折れましたよ！午後は粘土でいろんな形を作って楽しんでいました✨\n\nアレルギー対応食、しっかり食べています",
+    photos:["🍳 おままごと","🐕 折り紙","🎨 粘土"],
+    photoBg:["#FAFAD2","#E0FFFF","#FFF0F5"],
+    meal:{r:88,m:85,s:65,sp:90}
+  },
+  6:{
+    diary:"めいちゃんは少し遅れての登園でしたが、すぐにお友達の輪に入って元気に遊び始めました。\n\nリズム遊びの時間にはタンバリンを上手にたたいて、みんなの前で演奏を披露してくれました。\n\n外遊びでは水たまりに興味津々で、長靴でバシャバシャと楽しんでいました。\n\n給食はよく食べましたが、ほうれん草のおひたしは少し残しました。",
+    parent:"めいちゃん、少し遅めの登園でしたが元気に過ごしましたよ🎵\n\nリズム遊びでタンバリンの演奏を披露してくれました！お外では水たまりで大はしゃぎ😄\n\nお野菜がちょっと苦手みたいですが、他はもりもり食べています",
+    photos:["🎵 タンバリン","💧 水たまり","🥗 給食"],
+    photoBg:["#FFE4E1","#B0C4DE","#F5F5DC"],
+    meal:{r:92,m:78,s:55,sp:88}
+  },
+  7:{
+    diary:"りくくんはさくら組の年長さんとして、今日は小さいお友達のお世話を積極的に行っていました。\n\nひらがなの練習では「り」「く」と自分の名前を丁寧に書くことができました。\n\n体操の時間には前転が上手にでき、先生に褒められてとても嬉しそうでした。\n\n給食は好き嫌いなく全部食べました。",
+    parent:"りくくん、今日は年長さんらしく小さいお友達のお世話を頑張っていました👏\n\nひらがなで自分のお名前を書く練習も順調です。体操では前転がきれいにできましたよ！\n\n給食は完食でした🍚",
+    photos:["✏️ ひらがな","🤸 前転","🤝 お世話"],
+    photoBg:["#FFFACD","#E0FFE0","#FFE4B5"],
+    meal:{r:95,m:90,s:88,sp:100}
+  },
+  8:{
+    diary:"さくらちゃんは今日、お友達と一緒に大きなパズルを完成させました。「できた！」とみんなでハイタッチ。\n\n音楽の時間にはピアニカの練習で「きらきら星」を最後まで弾くことができました。\n\n昼食後は絵本コーナーでお友達に読み聞かせをしてあげていました。\n\n給食はおかわりを1回しました。",
+    parent:"さくらちゃん、今日はお友達とパズルを協力して完成させました🧩\n\nピアニカで「きらきら星」を弾けるようになりましたよ🎹 お友達に絵本を読んであげる優しい姿も見られました。\n\nよく食べています😊",
+    photos:["🧩 パズル","🎹 ピアニカ","📚 読み聞かせ"],
+    photoBg:["#D8BFD8","#AFEEEE","#FFEFD5"],
+    meal:{r:88,m:82,s:78,sp:95}
+  }
+};
+
+// ── Vital Data Generation ──
+const seed=(s)=>{let x=Math.sin(s)*10000;return x-Math.floor(x)};
+
+const genVitalToday=(childId)=>Array.from({length:20},(_,i)=>{
+  const s=seed(childId*1000+i);
+  return{time:`${Math.floor(8+i*0.5)}:${i%2===0?"00":"30"}`,hr:Math.floor(72+s*28),spo2:Math.floor(96+seed(childId*2000+i)*4),temp:+(36+seed(childId*3000+i)*0.8).toFixed(1)};
+});
+
+const genVitalWeek=(childId)=>Array.from({length:7},(_,i)=>{
+  const d=new Date();d.setDate(d.getDate()-6+i);
+  const s=seed(childId*100+i);
+  return{date:`${d.getMonth()+1}/${d.getDate()}`,day:["日","月","火","水","木","金","土"][d.getDay()],
+    hrAvg:Math.floor(78+s*18),hrMin:Math.floor(65+s*10),hrMax:Math.floor(90+s*20),
+    spo2Avg:Math.floor(96.5+seed(childId*200+i)*2.5),tempAvg:+(36.2+seed(childId*300+i)*0.5).toFixed(1),
+    sleepScore:Math.floor(70+seed(childId*400+i)*25)};
+});
+
+const genVitalMonth=(childId)=>Array.from({length:28},(_,i)=>{
+  const d=new Date();d.setDate(d.getDate()-27+i);
+  const s=seed(childId*50+i);
+  return{date:`${d.getMonth()+1}/${d.getDate()}`,hrAvg:Math.floor(76+s*20),spo2Avg:Math.floor(96+seed(childId*60+i)*3),
+    tempAvg:+(36.1+seed(childId*70+i)*0.6).toFixed(1),sleepScore:Math.floor(65+seed(childId*80+i)*30)};
+});
+
+const genVitalYear=(childId)=>Array.from({length:12},(_,i)=>{
+  const m=((new Date().getMonth()-11+i+12)%12)+1;
+  const s=seed(childId*10+i);
+  return{month:`${m}月`,hrAvg:Math.floor(75+s*20),spo2Avg:Math.floor(96.5+seed(childId*20+i)*2.5),
+    tempAvg:+(36.2+seed(childId*30+i)*0.5).toFixed(1),sleepScore:Math.floor(68+seed(childId*40+i)*28)};
+});
+
+const ACTIVITIES=[
+  {time:"8:00",act:"登園・自由遊び",icon:"🏠"},{time:"9:30",act:"朝の会",icon:"🎵"},
+  {time:"10:00",act:"お絵描き活動",icon:"🎨"},{time:"11:00",act:"外遊び（園庭）",icon:"🌳"},
+  {time:"11:45",act:"手洗い・給食準備",icon:"🧼"},{time:"12:00",act:"給食",icon:"🍱"},
+  {time:"13:00",act:"お昼寝",icon:"😴"},{time:"15:00",act:"おやつ",icon:"🍪"},
+  {time:"15:30",act:"自由遊び・降園",icon:"👋"},
+];
+const GROWTH=[{m:"4月",h:98.2,w:15.1},{m:"5月",h:98.8,w:15.3},{m:"6月",h:99.5,w:15.4},{m:"7月",h:100.1,w:15.6},{m:"8月",h:100.5,w:15.8},{m:"9月",h:101.2,w:16.0},{m:"10月",h:101.8,w:16.1},{m:"11月",h:102.3,w:16.3},{m:"12月",h:102.9,w:16.5},{m:"1月",h:103.4,w:16.6},{m:"2月",h:103.9,w:16.8}];
+const PLAN=[
+  {m:"4月",ev:["入園式","保護者会","身体測定"],th:"新しい環境に慣れる"},
+  {m:"5月",ev:["こどもの日会","遠足","歯科検診"],th:"友達と遊ぶ楽しさを知る"},
+  {m:"6月",ev:["時の記念日","プール開き","保育参観"],th:"水遊びを楽しむ"},
+  {m:"7月",ev:["七夕会","夏祭り","終業式"],th:"夏の自然に親しむ"},
+  {m:"8月",ev:["プール遊び","お盆休み"],th:"夏を思い切り楽しむ"},
+  {m:"9月",ev:["防災訓練","お月見会","運動会練習"],th:"体を動かす楽しさ"},
+  {m:"10月",ev:["運動会","ハロウィン","芋掘り遠足"],th:"秋の自然を感じる"},
+  {m:"11月",ev:["七五三","保育参観","発表会練習"],th:"表現する喜び"},
+  {m:"12月",ev:["発表会","クリスマス会","終業式"],th:"みんなで楽しむ行事"},
+  {m:"1月",ev:["始業式","お正月遊び","もちつき"],th:"日本の伝統に触れる"},
+  {m:"2月",ev:["節分","作品展","卒園式練習"],th:"成長を振り返る"},
+  {m:"3月",ev:["ひな祭り","卒園式","修了式"],th:"1年の成長を祝う"},
+];
+
+// ── Chart Components ──
+const SimpleBarChart=({data,dataKey,nameKey,color,height=200,domain,unit=""})=>{
+  const max=domain?domain[1]:Math.max(...data.map(d=>d[dataKey]))*1.1;
+  const min=domain?domain[0]:0;const range=max-min;
+  const ticks=5;const tickVals=Array.from({length:ticks+1},(_,i)=>Math.round(min+range*(i/ticks)));
+  return <div style={{height,display:"flex",padding:"10px 0 4px"}}>
+    <div style={{width:36,display:"flex",flexDirection:"column",justifyContent:"space-between",paddingBottom:24,paddingTop:4}}>
+      {tickVals.slice().reverse().map((v,i)=><div key={i} style={{fontSize:10,color:C.g500,textAlign:"right",lineHeight:"1"}}>{v}{unit}</div>)}
+    </div>
+    <div style={{flex:1,position:"relative",paddingBottom:24}}>
+      <div style={{position:"absolute",inset:"4px 0 24px 0"}}>
+        {tickVals.map((v,i)=><div key={i} style={{position:"absolute",left:0,right:0,bottom:(i/ticks)*100+"%",borderBottom:"1px "+(i===0?"solid":"dashed")+" "+C.g200}}/>)}
+      </div>
+      <div style={{display:"flex",alignItems:"flex-end",gap:6,height:"calc(100% - 24px)",position:"relative",zIndex:1,padding:"4px 8px 0"}}>
+        {data.map((d,i)=>{const pct=((d[dataKey]-min)/range)*100;
+          return <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4,height:"100%",justifyContent:"flex-end"}}>
+            <div style={{fontSize:11,color:C.g700,fontWeight:700}}>{d[dataKey]}{unit}</div>
+            <div style={{width:"100%",maxWidth:44,height:pct+"%",minHeight:4,background:"linear-gradient(180deg,"+(color||C.primary)+","+(color||C.primary)+"cc)",borderRadius:"6px 6px 0 0",transition:"height .5s"}}/>
+          </div>})}
+      </div>
+      <div style={{display:"flex",gap:6,padding:"6px 8px 0"}}>
+        {data.map((d,i)=><div key={i} style={{flex:1,textAlign:"center",fontSize:11,color:C.g500,fontWeight:600}}>{d[nameKey]}</div>)}
+      </div>
+    </div>
+  </div>;
+};
+
+const MultiBarChart=({data,bars,nameKey,height=200})=>{
+  const max=Math.max(...bars.flatMap(b=>data.map(d=>d[b.key])))*1.15;
+  return <div>
+    <div style={{height,display:"flex",alignItems:"flex-end",gap:8,padding:"20px 0 24px"}}>
+      {data.map((d,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+        <div style={{display:"flex",gap:2,alignItems:"flex-end",height:"100%",width:"100%",justifyContent:"center"}}>
+          {bars.map((b,j)=><div key={j} style={{width:Math.max(8,Math.floor(60/bars.length)),height:(d[b.key]/max)*100+"%",minHeight:4,background:b.color,borderRadius:"3px 3px 0 0"}} title={b.name+": "+d[b.key]+"%"}/>)}</div>
+        <div style={{fontSize:11,color:C.g500}}>{d[nameKey]}</div></div>)}
+    </div>
+    <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+      {bars.map((b,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:C.g500}}>
+        <div style={{width:10,height:10,borderRadius:2,background:b.color}}/>{b.name}</div>)}</div>
+  </div>;
+};
+
+const LineChartSVG=({data,lines,nameKey,height=220,showDots=true})=>{
+  const svgW=600,svgH=height-40;
+  const pad={t:15,r:15,b:30,l:45};
+  const cw=svgW-pad.l-pad.r,ch=svgH-pad.t-pad.b;
+  return <div style={{width:"100%",overflow:"hidden"}}>
+    <svg viewBox={"0 0 "+svgW+" "+svgH} style={{width:"100%",height}}>
+      {[0,.25,.5,.75,1].map((f,i)=><line key={i} x1={pad.l} y1={pad.t+ch*f} x2={svgW-pad.r} y2={pad.t+ch*f} stroke={C.g200} strokeDasharray="4 4"/>)}
+      {lines.map((line,li)=>{
+        const vals=data.map(d=>d[line.key]);
+        const yMin=line.min!==undefined?line.min:Math.min(...vals)*0.95;
+        const yMax=line.max!==undefined?line.max:Math.max(...vals)*1.05;
+        const yR=yMax-yMin||1;
+        const pts=data.map((d,i)=>({x:pad.l+(i/(data.length-1||1))*cw,y:pad.t+ch-((d[line.key]-yMin)/yR)*ch}));
+        const area=line.fill?pts.map((p,i)=>(i===0?"M":"L")+p.x+","+p.y).join(" ")+" L"+pts[pts.length-1].x+","+(pad.t+ch)+" L"+pts[0].x+","+(pad.t+ch)+" Z":"";
+        return <g key={li}>
+          {area&&<path d={area} fill={line.color} fillOpacity=".12"/>}
+          <polyline points={pts.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={line.color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+          {showDots&&data.length<=31&&pts.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="3" fill="#fff" stroke={line.color} strokeWidth="2"/>)}
+        </g>;
+      })}
+      {data.map((d,i)=>{
+        const show=data.length<=14||(i%(Math.ceil(data.length/10))===0)||i===data.length-1;
+        return show?<text key={i} x={pad.l+(i/(data.length-1||1))*cw} y={svgH-5} textAnchor="middle" fontSize="10" fill={C.g500}>{d[nameKey]}</text>:null;
+      })}
+    </svg>
+    <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:4}}>
+      {lines.map((l,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:l.color}}>
+        <div style={{width:14,height:3,borderRadius:2,background:l.color}}/>● {l.name}</div>)}</div>
+  </div>;
+};
+
+// ── UI Components ──
+const Badge=({children,color=C.primary,bg})=><span style={{display:"inline-block",padding:"2px 10px",borderRadius:12,fontSize:12,fontWeight:600,color,backgroundColor:bg||color+"18"}}>{children}</span>;
+const Card=({children,style,onClick})=><div onClick={onClick} style={{background:"#fff",borderRadius:16,padding:20,boxShadow:"0 1px 3px rgba(0,0,0,.08)",cursor:onClick?"pointer":"default",transition:"transform .15s, box-shadow .15s",...style}} onMouseEnter={e=>{if(onClick){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.12)"}}} onMouseLeave={e=>{if(onClick){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,.08)"}}}>{children}</div>;
+const Btn=({children,onClick,v="primary",sz="md",style:s,disabled})=>{
+  const vs={primary:{background:"linear-gradient(135deg,"+C.primary+","+C.primaryDark+")",color:"#fff",border:"none"},
+    secondary:{background:"#fff",color:C.g700,border:"1px solid "+C.g200},
+    accent:{background:"linear-gradient(135deg,"+C.accent+",#D97706)",color:"#fff",border:"none"},
+    danger:{background:"linear-gradient(135deg,"+C.danger+",#DC2626)",color:"#fff",border:"none"}};
+  const szs={sm:{padding:"6px 14px",fontSize:13},md:{padding:"10px 20px",fontSize:14},lg:{padding:"14px 28px",fontSize:16}};
+  return <button onClick={disabled?null:onClick} style={{...vs[v],...szs[sz],borderRadius:10,fontWeight:600,cursor:disabled?"not-allowed":"pointer",opacity:disabled?.5:1,transition:"all .15s",display:"inline-flex",alignItems:"center",gap:6,...s}}>{children}</button>;
+};
+const Sec=({icon,title,sub})=><div style={{marginBottom:16}}><h2 style={{fontSize:20,fontWeight:700,color:C.g900,margin:0,display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:24}}>{icon}</span>{title}</h2>{sub&&<p style={{fontSize:13,color:C.g500,margin:"4px 0 0 32px"}}>{sub}</p>}</div>;
+const Prog=({value,color=C.primary,h=8})=><div style={{background:C.g100,borderRadius:h,height:h,width:"100%",overflow:"hidden"}}><div style={{background:color,height:"100%",width:value+"%",borderRadius:h,transition:"width .5s"}}/></div>;
+const AITag=()=><span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 10px",borderRadius:20,background:"linear-gradient(135deg,#10B981,#3B82F6)",color:"#fff",fontSize:11,fontWeight:700}}>AI生成</span>;
+const Toast=({msg,type="success"})=>msg?<div className="toast" style={{background:type==="success"?"linear-gradient(135deg,#10B981,#059669)":type==="info"?"linear-gradient(135deg,#3B82F6,#2563EB)":"linear-gradient(135deg,#F59E0B,#D97706)"}}>{msg}</div>:null;
+const TabBar=({tabs,cur,setCur})=><div style={{display:"flex",gap:4,marginBottom:16,background:C.g100,borderRadius:10,padding:3}}>
+  {tabs.map(t=><div key={t.id} onClick={()=>setCur(t.id)} style={{flex:1,padding:"8px 12px",borderRadius:8,textAlign:"center",fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .2s",background:cur===t.id?C.primary:"transparent",color:cur===t.id?"#fff":C.g500}}>{t.label}</div>)}</div>;
+
+// ── Login Flow: Role Selection → Login ──
+const RoleSelectScreen=({onSelectRole})=><div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#064E3B 0%,#065F46 40%,#047857 100%)"}}>
+  <div style={{textAlign:"center",animation:"fadeIn .4s ease"}}>
+    <div style={{fontSize:72,marginBottom:8}}>🌱</div>
+    <h1 style={{color:"#fff",fontSize:42,fontWeight:800,margin:0,letterSpacing:2}}>そだちAI</h1>
+    <p style={{color:"#A7F3D0",fontSize:16,marginTop:8,marginBottom:40,letterSpacing:1}}>SODACHI AI — AIネイティブ保育プラットフォーム</p>
+    <p style={{color:"rgba(255,255,255,.6)",fontSize:14,marginBottom:24}}>ご利用のアカウントタイプを選択してください</p>
+    <div style={{display:"flex",gap:16,justifyContent:"center",flexWrap:"wrap"}}>
+      {[{role:"teacher",icon:"👩‍🏫",label:"保育士",sub:"日常業務・記録・連絡帳"},
+        {role:"director",icon:"👨‍💼",label:"園長・管理者",sub:"経営管理・計画・分析"},
+        {role:"parent",icon:"👨‍👩‍👧",label:"保護者",sub:"登降園・連絡帳・写真"}
+      ].map(r=><div key={r.role} onClick={()=>onSelectRole(r.role)} style={{
+        background:"rgba(255,255,255,.1)",backdropFilter:"blur(10px)",border:"1px solid rgba(255,255,255,.2)",
+        borderRadius:20,padding:"32px 28px",width:200,cursor:"pointer",transition:"all .2s",textAlign:"center"}}
+        onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.2)";e.currentTarget.style.transform="translateY(-4px)"}}
+        onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.1)";e.currentTarget.style.transform="translateY(0)"}}>
+        <div style={{fontSize:48}}>{r.icon}</div>
+        <div style={{color:"#fff",fontSize:20,fontWeight:700,marginTop:12}}>{r.label}</div>
+        <div style={{color:"#A7F3D0",fontSize:12,marginTop:6}}>{r.sub}</div>
+      </div>)}
+    </div>
+    <p style={{color:"rgba(255,255,255,.3)",fontSize:12,marginTop:40}}>Powered by 株式会社スキルアップNeXt × 富士フイルムビジネスイノベーションジャパン</p>
+  </div>
+</div>;
+
+const LoginScreen=({role,onLogin,onBack})=>{
+  const[email,setEmail]=useState("");const[pw,setPw]=useState("");
+  const[error,setError]=useState("");const[shaking,setShaking]=useState(false);
+  const rl=role==="teacher"?"保育士":role==="parent"?"保護者":"園長・管理者";
+  const ri=role==="teacher"?"👩‍🏫":role==="parent"?"👨‍👩‍👧":"👨‍💼";
+  const handleSubmit=e=>{e.preventDefault();
+    const user=USERS.find(u=>u.email===email);
+    if(user&&pw===PW){setError("");onLogin(user)}
+    else{setError("メールアドレスまたはパスワードが正しくありません");setShaking(true);setTimeout(()=>setShaking(false),500)}};
+  return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#064E3B 0%,#065F46 40%,#047857 100%)"}}>
+    <div style={{textAlign:"center",width:420}}>
+      <div style={{fontSize:48,marginBottom:4}}>{ri}</div>
+      <h1 style={{color:"#fff",fontSize:32,fontWeight:800,margin:0}}>{rl}ログイン</h1>
+      <p style={{color:"#A7F3D0",fontSize:14,marginTop:8,marginBottom:32}}>そだちAI — {rl}アカウント</p>
+      <div className={shaking?"shake":""} style={{background:"rgba(255,255,255,.1)",backdropFilter:"blur(10px)",border:"1px solid rgba(255,255,255,.2)",borderRadius:20,padding:"36px 32px",textAlign:"left"}}>
+        <form onSubmit={handleSubmit}>
+          <label style={{display:"block",color:"rgba(255,255,255,.8)",fontSize:13,fontWeight:600,marginBottom:6}}>メールアドレス</label>
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com" style={{width:"100%",padding:"12px 16px",borderRadius:10,border:"1px solid rgba(255,255,255,.3)",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:15,marginBottom:16}}/>
+          <label style={{display:"block",color:"rgba(255,255,255,.8)",fontSize:13,fontWeight:600,marginBottom:6}}>パスワード</label>
+          <input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="パスワードを入力" style={{width:"100%",padding:"12px 16px",borderRadius:10,border:"1px solid rgba(255,255,255,.3)",background:"rgba(255,255,255,.08)",color:"#fff",fontSize:15,marginBottom:8}}/>
+          {error&&<div style={{color:"#FCA5A5",fontSize:13,marginBottom:12,padding:"8px 12px",background:"rgba(239,68,68,.15)",borderRadius:8}}>⚠️ {error}</div>}
+          <button type="submit" style={{width:"100%",padding:"14px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#10B981,#059669)",color:"#fff",fontSize:16,fontWeight:700,cursor:"pointer",marginTop:8}}>ログイン</button>
+        </form>
+      </div>
+      <div onClick={onBack} style={{color:"rgba(255,255,255,.5)",fontSize:13,marginTop:20,cursor:"pointer"}}>← アカウントタイプ選択に戻る</div>
+    </div>
+  </div>;
+};
+
+// ── Sidebar ──
+const MENU_T=[{id:"dashboard",icon:"📊",label:"ダッシュボード"},{id:"attendance",icon:"📸",label:"AI登降園管理"},{id:"journal",icon:"📝",label:"AI日誌・連絡帳"},{id:"plan",icon:"📅",label:"AI年間計画"},{id:"event",icon:"🎪",label:"AIイベント企画"},{id:"meal",icon:"🍱",label:"食事・生活記録"},{id:"vital",icon:"💓",label:"バイタル監視"},{id:"growth",icon:"📈",label:"成長管理・アルバム"}];
+const MENU_P=[{id:"p_home",icon:"🏠",label:"ホーム"},{id:"p_timeline",icon:"📷",label:"今日のようす"},{id:"p_growth",icon:"📈",label:"成長記録"}];
+const MENU_D=[{id:"d_dashboard",icon:"📊",label:"経営ダッシュボード"},{id:"d_staff",icon:"👩‍🏫",label:"職員管理"},{id:"d_plan",icon:"📅",label:"年間計画"}];
+
+const Sidebar=({role,cur,setPage,onLogout,userName})=>{
+  const menus=role==="teacher"?MENU_T:role==="parent"?MENU_P:MENU_D;
+  const rl=role==="teacher"?"保育士":role==="parent"?"保護者":"園長";
+  return <div style={{width:240,minHeight:"100vh",background:"linear-gradient(180deg,#064E3B,#065F46)",color:"#fff",padding:"20px 0",flexShrink:0,display:"flex",flexDirection:"column"}}>
+    <div style={{padding:"0 20px 16px",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
+      <div style={{fontSize:22,fontWeight:800,letterSpacing:1}}>🌱 そだちAI</div>
+      <div style={{fontSize:11,opacity:.7,marginTop:4}}>{rl}ビュー</div>
+      <div style={{fontSize:12,opacity:.5,marginTop:2}}>{userName}</div>
+    </div>
+    <nav style={{padding:"12px 0",flex:1}}>
+      {menus.map(m=><div key={m.id} onClick={()=>setPage(m.id)} style={{padding:"12px 20px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,background:cur===m.id?"rgba(255,255,255,.15)":"transparent",borderLeft:cur===m.id?"3px solid #34D399":"3px solid transparent",transition:"all .15s",fontSize:14,fontWeight:cur===m.id?600:400}}
+        onMouseEnter={e=>{if(cur!==m.id)e.currentTarget.style.background="rgba(255,255,255,.08)"}}
+        onMouseLeave={e=>{if(cur!==m.id)e.currentTarget.style.background="transparent"}}>
+        <span style={{fontSize:18}}>{m.icon}</span>{m.label}</div>)}
+    </nav>
+    <div style={{padding:"12px 20px",borderTop:"1px solid rgba(255,255,255,.1)"}}>
+      <div onClick={onLogout} style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",fontSize:13,textAlign:"center",background:"rgba(255,255,255,.08)"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.15)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.08)"}>🚪 ログアウト</div>
+      <div style={{fontSize:11,opacity:.4,textAlign:"center",marginTop:8}}>© 2026 スキルアップNeXt</div>
+    </div>
+  </div>;
+};
+
+// ── Detail Modal ──
+const DetailModal=({title,icon,children,onClose})=><div className="modal-overlay" onClick={onClose}>
+  <div className="modal-box" onClick={e=>e.stopPropagation()}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+      <h2 style={{fontSize:20,fontWeight:700,display:"flex",alignItems:"center",gap:8,margin:0}}><span style={{fontSize:28}}>{icon}</span>{title}</h2>
+      <div onClick={onClose} style={{width:36,height:36,borderRadius:"50%",background:C.g100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:18}}>✕</div>
+    </div>
+    {children}
+  </div></div>;
+
+// ── AI Suggest Detail Pages ──
+const SuggestContact=({onBack})=><div>
+  <div onClick={onBack} style={{cursor:"pointer",fontSize:13,color:C.primary,marginBottom:16}}>← ダッシュボードに戻る</div>
+  <Card style={{marginBottom:16}}>
+    <Sec icon="📞" title="保護者連絡 — 伊藤そうたくん" sub="未登園のため確認連絡"/>
+    <div style={{background:C.accentLight,borderRadius:12,padding:16,marginBottom:16}}>
+      <div style={{fontSize:13,fontWeight:700,color:C.g900,marginBottom:8}}>⚠️ 状況</div>
+      <div style={{fontSize:13,color:C.g700}}>伊藤そうたくん（4歳・ひまわり組）は本日 9:30 時点で登園がありません。欠席連絡も届いていません。</div></div>
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>📋 保護者情報</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <div style={{fontSize:13,color:C.g700}}>保護者：伊藤 美穂（母）</div>
+        <div style={{fontSize:13,color:C.g700}}>連絡先：090-1234-5678</div>
+        <div style={{fontSize:13,color:C.g700}}>緊急連絡先：伊藤 大輔（父）</div>
+        <div style={{fontSize:13,color:C.g700}}>連絡先：090-8765-4321</div></div></div>
+    <AITag/><div style={{fontSize:13,color:C.g700,marginTop:8,lineHeight:1.8,background:C.g50,borderRadius:10,padding:14}}>
+      <div style={{fontWeight:700,marginBottom:4}}>AI生成メッセージ案：</div>
+      「おはようございます。ひまわり組の担任です。本日、そうたくんの登園がまだ確認できておりません。ご体調など変わりございませんでしょうか。お手数ですがご連絡いただけますと幸いです。」</div>
+    <div style={{display:"flex",gap:8,marginTop:16}}>
+      <Btn onClick={onBack}>📱 このメッセージで連絡する</Btn>
+      <Btn v="secondary">✏️ 編集して連絡する</Btn></div>
+  </Card></div>;
+
+const SuggestJournal=({onBack})=><div>
+  <div onClick={onBack} style={{cursor:"pointer",fontSize:13,color:C.primary,marginBottom:16}}>← ダッシュボードに戻る</div>
+  <Card style={{marginBottom:16}}>
+    <Sec icon="📝" title="AI日誌ドラフト — 田中ゆうとくん" sub="AIが自動生成した日誌を確認"/>
+    <AITag/><div style={{marginTop:12,fontSize:13,lineHeight:1.9,color:C.g700,background:C.g50,borderRadius:12,padding:16}}>
+      <div style={{fontWeight:700,color:C.g900,marginBottom:8}}>🌟 今日の活動記録</div>
+      今日のゆうとくんは、朝の自由遊びの時間にブロックで大きなお城を作っていました。「先生、見て！お城できたよ！」と嬉しそうに教えてくれました。<br/><br/>
+      お絵描きの時間には、クレヨンを使って家族の絵を描きました。「これはパパ、これはママ、これはぼく！」と一つひとつ説明してくれました。<br/><br/>
+      外遊びでは、佐藤あおいちゃんと一緒に砂場で遊び、山を作って楽しんでいました。<br/><br/>
+      <div style={{fontWeight:700,color:C.g900,marginTop:12,marginBottom:4}}>🍱 給食</div>
+      ごはん 90%・主菜 80%・副菜 70%・スープ 100%。おかわり1回。<br/><br/>
+      <div style={{fontWeight:700,color:C.g900,marginTop:12,marginBottom:4}}>💤 午睡</div>
+      12:50〜14:45（1時間55分）。すぐに入眠し、ぐっすり眠りました。<br/><br/>
+      <div style={{fontWeight:700,color:C.g900,marginTop:12,marginBottom:4}}>📸 AI選定写真（3枚）</div>
+      <div style={{display:"flex",gap:8,marginTop:4}}>{[{e:"🎨",bg:"#FFE4C4",l:"お絵描き"},{e:"🏗",bg:"#B0E0E6",l:"ブロック"},{e:"⛱",bg:"#F0E68C",l:"砂場"}].map((p,i)=>
+        <div key={i} style={{width:80,height:60,borderRadius:8,background:"linear-gradient(135deg,"+p.bg+",#fff)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,border:"1px solid "+C.g200}}>{p.e}</div>)}</div>
+    </div>
+    <div style={{display:"flex",gap:8,marginTop:16}}>
+      <Btn onClick={onBack}>✅ 承認する</Btn>
+      <Btn v="secondary">✏️ 修正する</Btn>
+      <Btn v="accent">🔄 AI再生成</Btn></div>
+  </Card></div>;
+
+const SuggestEvent=({onBack})=><div>
+  <div onClick={onBack} style={{cursor:"pointer",fontSize:13,color:C.primary,marginBottom:16}}>← ダッシュボードに戻る</div>
+  <Card style={{marginBottom:16}}>
+    <Sec icon="👹" title="節分イベント プログラム案" sub="来週 2/3（火）実施予定"/>
+    <AITag/><div style={{marginTop:12}}>
+      <div style={{display:"grid",gap:12}}>
+        {[{time:"10:00",act:"はじめの言葉・節分のお話",detail:"園長先生から節分の由来についてのお話。紙芝居「おにはそと」を使用。",who:"園長・担任"},
+          {time:"10:15",act:"豆まきの歌・手遊び",detail:"「まめまき」を全員で歌います。鬼のパンツの手遊びも。",who:"音楽担当"},
+          {time:"10:30",act:"鬼登場！豆まき",detail:"職員2名が鬼役。各組ごとに新聞紙の豆で豆まき。「鬼は外！福は内！」",who:"全職員"},
+          {time:"10:50",act:"恵方巻き製作",detail:"折り紙で恵方巻きを作ります。今年の方角（南南東）のお話も。",who:"担任"},
+          {time:"11:10",act:"記念撮影・おわりの言葉",detail:"鬼のお面をつけてクラスごとに記念撮影。",who:"担任・フリー"},
+          {time:"12:00",act:"特別給食：鬼さんカレー",detail:"鬼の顔をモチーフにしたカレーライス。アレルギー対応あり。",who:"給食室"}
+        ].map((ev,i)=><div key={i} style={{display:"flex",gap:12,padding:12,background:C.g50,borderRadius:10}}>
+          <div style={{minWidth:50,fontSize:13,fontWeight:700,color:C.primary}}>{ev.time}</div>
+          <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:C.g900}}>{ev.act}</div>
+            <div style={{fontSize:12,color:C.g700,marginTop:2}}>{ev.detail}</div>
+            <div style={{fontSize:11,color:C.g500,marginTop:4}}>担当: {ev.who}</div></div></div>)}
+      </div>
+      <div style={{marginTop:16,padding:12,background:C.accentLight,borderRadius:10}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.g900}}>📝 準備物リスト</div>
+        <div style={{fontSize:12,color:C.g700,marginTop:4}}>新聞紙（豆用）・鬼のお面キット・折り紙（恵方巻き用）・鬼のコスチューム×2・紙芝居「おにはそと」・記念撮影用背景</div></div>
+    </div>
+    <div style={{display:"flex",gap:8,marginTop:16}}>
+      <Btn onClick={onBack}>✅ この案で決定</Btn>
+      <Btn v="secondary">✏️ 修正する</Btn>
+      <Btn v="accent">🔄 AI再生成</Btn>
+      <Btn v="secondary">📄 PDF出力</Btn></div>
+  </Card></div>;
+
+// ── Teacher Dashboard ──
+const TeacherDash=({userName})=>{
+  const[vm,setVm]=useState(false);const[modal,setModal]=useState(null);const[subPage,setSubPage]=useState(null);
+  const ac=CHILDREN.filter(c=>c.arrived).length;const absent=CHILDREN.filter(c=>!c.arrived);
+  const arrived=CHILDREN.filter(c=>c.arrived);
+
+  // Detail data for each card popup
+  const cardDetails={
+    attendance:{icon:"👶",title:"出席状況 詳細",content:<div>
+      <div style={{fontWeight:700,fontSize:14,color:C.primary,marginBottom:12}}>✅ 出席（{arrived.length}名）</div>
+      {arrived.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid "+C.g100}}>
+        <span style={{fontSize:22}}>{c.photo}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{c.name}</div><div style={{fontSize:11,color:C.g500}}>{c.cls}・{c.age}歳</div></div>
+        <div style={{fontSize:12,color:C.primary}}>🕐 {c.time}（{c.parent}送り）</div></div>)}
+      <div style={{fontWeight:700,fontSize:14,color:C.danger,marginTop:16,marginBottom:12}}>❌ 未登園（{absent.length}名）</div>
+      {absent.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0"}}>
+        <span style={{fontSize:22}}>{c.photo}</span><div><div style={{fontSize:13,fontWeight:600}}>{c.name}</div><div style={{fontSize:11,color:C.g500}}>{c.cls}・{c.age}歳</div></div>
+        <Badge color={C.danger}>連絡なし</Badge></div>)}
+    </div>},
+    journal:{icon:"📝",title:"AI日誌 承認待ち",content:<div>
+      {[{n:"田中 ゆうと",s:"ブロック遊び・お絵描き・砂場",st:"draft"},{n:"佐藤 あおい",s:"お花の絵・ブランコ・給食",st:"draft"},{n:"鈴木 はると",s:"積み木タワー・鬼ごっこ・絵本",st:"draft"},
+        {n:"高橋 ひなた",s:"おままごと・折り紙・粘土",st:"draft"},{n:"渡辺 めい",s:"タンバリン・水たまり・リズム遊び",st:"draft"}].map((j,i)=>
+        <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderBottom:"1px solid "+C.g100}}>
+          <div><div style={{fontSize:14,fontWeight:600}}>{j.n}</div><div style={{fontSize:12,color:C.g500,marginTop:2}}>{j.s}</div></div>
+          <div style={{display:"flex",gap:6}}><Badge color={C.info}>AI生成済</Badge><Btn v="secondary" sz="sm">確認</Btn></div></div>)}
+    </div>},
+    vital:{icon:"💓",title:"バイタル状況 一覧",content:<div>
+      {arrived.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid "+C.g100}}>
+        <span style={{fontSize:22}}>{c.photo}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{c.name}</div></div>
+        <div style={{display:"flex",gap:12,fontSize:12}}>
+          <span>❤️ {c.hr}bpm</span><span>🫁 SpO₂ {c.spo2}%</span><span>🌡 {c.temp}℃</span>
+        </div><Badge color={C.primary}>正常</Badge></div>)}
+    </div>},
+    alert:{icon:"⚠️",title:"アラート詳細",content:<div>
+      <div style={{background:C.accentLight,borderRadius:12,padding:16,marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><Badge color={C.accent}>未対応</Badge><span style={{fontSize:13,fontWeight:700}}>未登園アラート</span></div>
+        <div style={{fontSize:13,color:C.g700}}>伊藤そうたくん（4歳・ひまわり組）が 9:30 時点で登園確認できていません。欠席連絡も届いていません。</div>
+        <div style={{display:"flex",gap:8,marginTop:12}}><Btn sz="sm">📞 保護者に連絡</Btn><Btn v="secondary" sz="sm">✓ 対応済みにする</Btn></div></div>
+      <div style={{fontSize:13,fontWeight:700,color:C.g700,marginTop:16,marginBottom:8}}>過去のアラート（対応済み）</div>
+      {[{t:"2/14 佐藤あおい 体温 37.8℃",r:"保護者連絡済・早退"},{t:"2/12 鈴木はると 午睡中 SpO₂ 低下",r:"体位変更で回復"}].map((a,i)=>
+        <div key={i} style={{padding:"8px 0",borderBottom:"1px solid "+C.g100,fontSize:12}}>
+          <div style={{color:C.g700}}>{a.t}</div><div style={{color:C.g500}}>対応: {a.r}</div></div>)}
+    </div>}
+  };
+
+  if(subPage==="contact")return <SuggestContact onBack={()=>setSubPage(null)}/>;
+  if(subPage==="journal")return <SuggestJournal onBack={()=>setSubPage(null)}/>;
+  if(subPage==="event")return <SuggestEvent onBack={()=>setSubPage(null)}/>;
+
+  return <div>
+    {modal&&<DetailModal icon={cardDetails[modal].icon} title={cardDetails[modal].title} onClose={()=>setModal(null)}>{cardDetails[modal].content}</DetailModal>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+      <div><h1 style={{fontSize:24,fontWeight:800,color:C.g900,margin:0}}>{userName?userName+"さん、":""}おはようございます 👋</h1>
+        <p style={{color:C.g500,margin:"4px 0 0",fontSize:14}}>2026年2月17日（火）｜ひまわり組</p></div>
+      <Btn v={vm?"danger":"accent"} onClick={()=>setVm(!vm)}>{vm?"⏹ 録音停止":"🎤 音声メモ"}</Btn></div>
+    {vm&&<Card style={{background:"linear-gradient(135deg,#FEF3C7,#FDE68A)",marginBottom:16,border:"1px solid #F59E0B"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <div style={{width:12,height:12,borderRadius:"50%",background:C.danger,animation:"pulse 1.5s infinite"}}/>
+        <div><div style={{fontWeight:700,fontSize:14,color:C.g900}}>音声メモ録音中...</div>
+          <div style={{fontSize:12,color:C.g700}}>AIが自動でテキスト化し日誌素材に登録します</div></div></div></Card>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+      {[{icon:"👶",l:"出席",v:ac+"/"+CHILDREN.length+"名",c:C.primary,k:"attendance"},{icon:"📝",l:"AI日誌",v:"5件 承認待ち",c:C.info,k:"journal"},{icon:"💓",l:"バイタル",v:"全員正常",c:C.primary,k:"vital"},{icon:"⚠️",l:"アラート",v:"1件",c:C.accent,k:"alert"}].map((k,i)=>
+        <Card key={i} onClick={()=>setModal(k.k)} style={{cursor:"pointer"}}><div style={{fontSize:28}}>{k.icon}</div><div style={{fontSize:12,color:C.g500,marginTop:8}}>{k.l}</div><div style={{fontSize:18,fontWeight:700,color:k.c,marginTop:2}}>{k.v}</div>
+          <div style={{fontSize:11,color:C.primary,marginTop:6}}>詳細を見る →</div></Card>)}</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      <Card><Sec icon="✨" title="AIサジェスト" sub="そだちAIからの提案"/>
+        {[{t:"伊藤そうたくん（未登園）の保護者に確認連絡を送りますか？",tp:"w",a:"連絡する",pg:"contact"},{t:"田中ゆうとくんのAI日誌ドラフトが完成しました。",tp:"i",a:"確認する",pg:"journal"},{t:"来週の節分イベントのプログラム案を作成しました。",tp:"s",a:"見る",pg:"event"}].map((s,i)=>
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",borderRadius:10,marginBottom:8,background:s.tp==="w"?C.accentLight:s.tp==="i"?C.infoLight:C.primaryLight}}>
+            <div style={{fontSize:13,color:C.g700,flex:1}}>{s.t}</div><Btn v="secondary" sz="sm" onClick={()=>setSubPage(s.pg)}>{s.a}</Btn></div>)}</Card>
+      <Card><Sec icon="🕐" title="今日のスケジュール"/>
+        <div style={{maxHeight:280,overflow:"auto"}}>
+          {ACTIVITIES.map((a,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<ACTIVITIES.length-1?"1px solid "+C.g100:"none",opacity:i<4?.5:1}}>
+            <div style={{fontSize:22}}>{a.icon}</div><div><div style={{fontSize:13,fontWeight:600,color:C.g900}}>{a.act}</div><div style={{fontSize:11,color:C.g500}}>{a.time}</div></div>
+            {i<4&&<Badge color={C.g500}>完了</Badge>}{i===4&&<Badge color={C.primary} bg={C.primaryLight}>進行中</Badge>}</div>)}</div></Card>
+    </div></div>;
+};
+
+// ── Attendance ──
+const AttPage=()=>{
+  const[di,setDi]=useState(0);
+  useEffect(()=>{const t=setInterval(()=>setDi(p=>(p+1)%CHILDREN.filter(c=>c.arrived).length),3000);return()=>clearInterval(t)},[]);
+  const arr=CHILDREN.filter(c=>c.arrived);const d=arr[di];
+  return <div><Sec icon="📸" title="AI登降園管理" sub="玄関カメラによる自動顔認識"/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+      <Card style={{background:"#000",padding:0,overflow:"hidden",position:"relative"}}>
+        <div style={{padding:16,background:"rgba(0,0,0,.7)",position:"absolute",top:0,left:0,right:0,zIndex:1}}>
+          <div style={{color:"#34D399",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:"#EF4444"}}/>LIVE — 玄関カメラ</div></div>
+        <div style={{height:320,display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1a1a2e,#16213e)"}}>
+          <div style={{textAlign:"center"}}><div style={{fontSize:80}}>{d?d.photo:"🧒"}</div>
+            <div style={{marginTop:16,padding:"8px 20px",borderRadius:8,background:"rgba(16,185,129,.2)",border:"2px solid #34D399",color:"#34D399",fontWeight:700,fontSize:14}}>✅ 顔認識完了: {d?d.name:"---"}</div>
+            <div style={{color:"#9CA3AF",fontSize:12,marginTop:8}}>送迎者: {d?d.parent:"---"} ｜ {d?d.time:"---"} 登園</div></div></div></Card>
+      <Card><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{fontSize:16,fontWeight:700,color:C.g900}}>登降園ステータス</div><Badge color={C.primary}>{arr.length}/{CHILDREN.length}名 登園済</Badge></div>
+        <div style={{maxHeight:260,overflow:"auto"}}>
+          {CHILDREN.map(c=><div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid "+C.g100}}>
+            <div style={{fontSize:24}}>{c.photo}</div>
+            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{c.name}</div><div style={{fontSize:11,color:C.g500}}>{c.cls}</div></div>
+            {c.arrived?<div style={{textAlign:"right"}}><Badge color={C.primary}>✓ {c.time}</Badge><div style={{fontSize:10,color:C.g500,marginTop:2}}>送迎: {c.parent}</div></div>:<Badge color={C.danger} bg={C.dangerLight}>未登園</Badge>}
+          </div>)}</div></Card></div>
+    <Card style={{background:C.accentLight,border:"1px solid "+C.accent}}>
+      <div style={{display:"flex",alignItems:"center",gap:12}}><AITag/><span style={{fontSize:13,color:C.g700}}>伊藤そうたくんが9:30時点で未登園です。保護者（母）へ確認連絡を送信しますか？</span>
+        <Btn v="accent" sz="sm">連絡する</Btn><Btn v="secondary" sz="sm">後で</Btn></div></Card></div>;
+};
+
+// ── Journal Page with per-child data ──
+const JournalPage=()=>{
+  const arrivedChildren=CHILDREN.filter(c=>c.arrived);
+  const[selId,setSelId]=useState(arrivedChildren[0].id);
+  const[approved,setApproved]=useState({});
+  const[editMode,setEditMode]=useState({});
+  const[editText,setEditText]=useState({});
+  const[toast,setToast]=useState("");
+  const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(""),2500)};
+
+  const j=JOURNALS[selId]||JOURNALS[1];
+  const child=CHILDREN.find(c=>c.id===selId);
+  const diaryText=editText[selId]||j.diary;
+
+  return <div>
+    <Toast msg={toast}/>
+    <Sec icon="📝" title="AI日誌・連絡帳" sub="AIが自動生成 → 保育士が確認・承認するだけ"/>
+    <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+      {arrivedChildren.map(c=><div key={c.id} onClick={()=>setSelId(c.id)} style={{
+        padding:"8px 14px",borderRadius:10,cursor:"pointer",background:selId===c.id?C.primary:"#fff",
+        color:selId===c.id?"#fff":C.g700,border:"1px solid "+(selId===c.id?C.primary:C.g200),
+        fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:6,transition:"all .15s"}}>
+        {c.photo} {c.name}{approved[c.id]&&<span style={{color:selId===c.id?"#fff":C.primary}}>✓</span>}
+      </div>)}</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontWeight:700,fontSize:15}}>📋 {child.name}の保育日誌</div><AITag/></div>
+        <div style={{fontSize:12,color:C.g500,marginBottom:8}}>素材: カメラ行動認識 + 音声メモ + 写真から自動生成</div>
+        {editMode[selId]?
+          <textarea value={diaryText} onChange={e=>setEditText(p=>({...p,[selId]:e.target.value}))}
+            style={{width:"100%",minHeight:200,padding:16,borderRadius:10,border:"1px solid "+C.primary,fontSize:13,lineHeight:1.8,fontFamily:"inherit",resize:"vertical"}}/>
+          :<div style={{background:C.g50,borderRadius:10,padding:16,fontSize:13,lineHeight:1.8,color:C.g700,whiteSpace:"pre-wrap",border:"1px solid "+C.g200,maxHeight:300,overflow:"auto"}}>{diaryText}</div>}
+        <div style={{display:"flex",gap:8,marginTop:12}}>
+          {!approved[selId]&&<Btn v="primary" onClick={()=>{setApproved(p=>({...p,[selId]:true}));setEditMode(p=>({...p,[selId]:false}));showToast("✅ "+child.name+"の日誌を承認しました")}}>✅ 承認する</Btn>}
+          {!editMode[selId]?<Btn v="secondary" onClick={()=>{setEditMode(p=>({...p,[selId]:true}));if(!editText[selId])setEditText(p=>({...p,[selId]:j.diary}))}}>✏️ 修正する</Btn>
+          :<Btn v="primary" onClick={()=>{setEditMode(p=>({...p,[selId]:false}));showToast("💾 修正を保存しました")}}>💾 保存</Btn>}
+        </div>
+        {approved[selId]&&<div style={{marginTop:8,padding:"8px 12px",borderRadius:8,background:C.primaryLight,fontSize:12,color:C.primaryDark,fontWeight:600}}>✅ 承認済み — 連絡帳が保護者に送信されます</div>}
+      </Card>
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontWeight:700,fontSize:15}}>💌 連絡帳（保護者向け）</div><AITag/></div>
+        <div style={{fontSize:12,color:C.g500,marginBottom:8}}>日誌データから保護者向けに温かいトーンで自動変換</div>
+        <div style={{background:"#FFF7ED",borderRadius:10,padding:16,fontSize:13,lineHeight:1.8,color:C.g700,whiteSpace:"pre-wrap",border:"1px solid #FED7AA",maxHeight:300,overflow:"auto"}}>{j.parent}</div>
+        <div style={{marginTop:12}}><div style={{fontSize:12,fontWeight:600,color:C.g700,marginBottom:8}}>📸 自動選定された写真（3枚）</div>
+          <div style={{display:"flex",gap:8}}>
+            {j.photos.map((p,i)=><div key={i} style={{width:100,height:100,borderRadius:10,background:"linear-gradient(135deg,"+j.photoBg[i]+",#fff)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:C.g700,textAlign:"center",border:"1px solid "+C.g200,flexDirection:"column",gap:4,boxShadow:"0 2px 8px rgba(0,0,0,.08)"}}>
+              <span style={{fontSize:28}}>{p.split(" ")[0]}</span>
+              <span style={{fontSize:10}}>{p.split(" ").slice(1).join(" ")}</span>
+            </div>)}</div></div>
+      </Card>
+    </div></div>;
+};
+
+// ── Plan Page with working buttons ──
+const PlanPage=()=>{
+  const[sm,setSm]=useState(null);
+  const[approvedM,setApprovedM]=useState({});
+  const[regen,setRegen]=useState({});
+  const[toast,setToast]=useState("");
+  const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(""),2500)};
+
+  return <div>
+    <Toast msg={toast}/>
+    <Sec icon="📅" title="AI年間計画" sub="園プロファイルと保育所保育指針に基づきAIが自動立案"/>
+    <Card style={{marginBottom:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{fontSize:16,fontWeight:700}}>2026年度 年間計画 — ひまわり組（3〜4歳児）</div>
+        <div style={{display:"flex",gap:8}}><AITag/><Btn v="secondary" sz="sm" onClick={()=>showToast("📄 PDF出力処理を開始しました")}>📥 PDF出力</Btn></div></div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+        {PLAN.map((m,i)=><div key={i} onClick={()=>setSm(sm===i?null:i)} style={{
+          padding:14,borderRadius:12,cursor:"pointer",transition:"all .15s",
+          background:approvedM[i]?C.primaryLight:sm===i?"#EDE9FE":C.g50,
+          border:"1px solid "+(approvedM[i]?C.primary:sm===i?C.purple:C.g200)}}>
+          <div style={{display:"flex",justifyContent:"space-between"}}>
+            <div style={{fontWeight:700,fontSize:14,color:C.primary}}>{m.m}</div>
+            {approvedM[i]&&<span style={{fontSize:10,color:C.primary}}>✓承認済</span>}
+          </div>
+          <div style={{fontSize:11,color:C.g500,marginBottom:6,fontStyle:"italic"}}>"{m.th}"</div>
+          {m.ev.map((e,j)=><div key={j} style={{fontSize:12,color:C.g700,padding:"2px 0"}}>• {e}</div>)}
+        </div>)}</div></Card>
+    {sm!==null&&<Card style={{animation:"fadeIn .3s ease"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontSize:16,fontWeight:700}}>{PLAN[sm].m}の月間計画詳細</div>
+        {regen[sm]&&<Badge color={C.accent}>再生成済</Badge>}
+        <AITag/></div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+        <div style={{padding:14,background:C.g50,borderRadius:10}}>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:8,color:C.primary}}>🎯 ねらい</div>
+          <div style={{fontSize:12,color:C.g700,lineHeight:1.6}}>{PLAN[sm].th}ことを目標に、園児一人ひとりの発達に合わせた活動を展開する。{regen[sm]?" 【AIにより再構成済み】":""}</div></div>
+        <div style={{padding:14,background:C.g50,borderRadius:10}}>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:8,color:C.info}}>📚 活動内容</div>
+          {PLAN[sm].ev.map((e,i)=><div key={i} style={{fontSize:12,color:C.g700,padding:"3px 0"}}>• {e}</div>)}</div>
+        <div style={{padding:14,background:C.g50,borderRadius:10}}>
+          <div style={{fontSize:13,fontWeight:700,marginBottom:8,color:C.accent}}>📝 配慮事項</div>
+          <div style={{fontSize:12,color:C.g700,lineHeight:1.6}}>アレルギー児への対応確認。安全面の点検を実施。保護者との連携を密に。</div></div>
+      </div>
+      <div style={{display:"flex",gap:8,marginTop:12}}>
+        <Btn v="primary" sz="sm" disabled={approvedM[sm]} onClick={()=>{setApprovedM(p=>({...p,[sm]:true}));showToast("✅ "+PLAN[sm].m+"の計画を承認しました")}}>
+          {approvedM[sm]?"✅ 承認済み":"✅ この計画を承認"}</Btn>
+        <Btn v="secondary" sz="sm" onClick={()=>showToast("✏️ 修正モードに切り替えました（デモ）")}>✏️ 修正</Btn>
+        <Btn v="secondary" sz="sm" onClick={()=>{setRegen(p=>({...p,[sm]:true}));showToast("🔄 AIが"+PLAN[sm].m+"の計画を再生成しました")}}>🔄 AI再生成</Btn>
+        <Btn v="secondary" sz="sm" onClick={()=>showToast("📄 "+PLAN[sm].m+"のPDF出力を開始しました")}>📥 PDF出力</Btn>
+      </div>
+    </Card>}
+  </div>;
+};
+
+// ── Event Page ──
+const EventPage=()=>{
+  const[sp,setSp]=useState(false);const[toast,setToast]=useState("");
+  const showToast=(msg)=>{setToast(msg);setTimeout(()=>setToast(""),2500)};
+  return <div><Toast msg={toast}/>
+    <Sec icon="🎪" title="AIイベント企画" sub="園プロファイルに基づき、オリジナリティのある企画をAIが自動生成"/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+      <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>🏃 直近のイベント</div>
+        {[{n:"節分・豆まき会",d:"2/3",s:"完了",c:C.g500},{n:"作品展",d:"2/21",s:"準備中",c:C.accent},{n:"ひな祭り会",d:"3/3",s:"企画中",c:C.info},{n:"卒園式",d:"3/20",s:"企画中",c:C.info}].map((e,i)=>
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid "+C.g100}}>
+            <div><div style={{fontSize:14,fontWeight:600}}>{e.n}</div><div style={{fontSize:12,color:C.g500}}>{e.d}</div></div><Badge color={e.c}>{e.s}</Badge></div>)}</Card>
+      <Card style={{background:"linear-gradient(135deg,#EDE9FE,#DDD6FE)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+          <div style={{fontWeight:700,fontSize:15}}>🎎 ひな祭り会 — AI企画案</div><AITag/></div>
+        <div style={{fontSize:13,color:C.g700,lineHeight:1.8}}>園プロファイルの過去実績を基に生成。</div>
+        <div style={{background:"#fff",borderRadius:10,padding:14,marginTop:12}}>
+          <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>📋 プログラム案</div>
+          <div style={{fontSize:12,color:C.g700,lineHeight:1.8}}>1. 開会の挨拶（5分）<br/>2. ひな祭りクイズ（10分）<br/>3. ひな人形制作（25分）<br/>4. 合唱（5分）<br/>5. 記念撮影（10分）<br/>6. ひなあられ配布（5分）</div></div>
+        <div style={{display:"flex",gap:8,marginTop:12}}>
+          <Btn v="primary" sz="sm" onClick={()=>setSp(true)}>📄 タイムテーブル出力</Btn>
+          <Btn v="secondary" sz="sm" onClick={()=>showToast("✅ 企画を承認しました")}>✅ 承認</Btn>
+        </div></Card></div>
+    {sp&&<Card style={{animation:"fadeIn .3s ease"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:15}}>🖨️ 印刷用タイムテーブル</div>
+        <div style={{display:"flex",gap:8}}><Btn v="secondary" sz="sm" onClick={()=>showToast("📄 PDF出力を開始しました")}>📥 PDF出力</Btn><Btn v="secondary" sz="sm" onClick={()=>setSp(false)}>✕ 閉じる</Btn></div></div>
+      <div style={{border:"2px solid "+C.g200,borderRadius:10,padding:24}}>
+        <div style={{textAlign:"center",marginBottom:20}}><div style={{fontSize:24,fontWeight:700}}>🎎 ひな祭り会プログラム 🎎</div>
+          <div style={{fontSize:14,color:C.g500,marginTop:4}}>2026年3月3日（火）10:00〜11:00 ｜ ひまわり保育園 遊戯室</div></div>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
+          <thead><tr style={{background:"#FDF2F8"}}>{["時間","内容","担当","備品"].map((h,i)=><th key={i} style={{padding:"10px 12px",textAlign:"left",borderBottom:"2px solid #F9A8D4"}}>{h}</th>)}</tr></thead>
+          <tbody>{[["10:00","開会の挨拶","園長","マイク"],["10:05","ひな祭りクイズ","山田先生","パネル"],["10:15","ひな人形制作","各担任","紙皿、千代紙"],["10:40","合唱","鈴木先生","楽譜"],["10:45","記念撮影","事務員","カメラ"],["10:55","配布・閉会","各担任","ひなあられ"]].map((r,i)=>
+            <tr key={i} style={{borderBottom:"1px solid "+C.g200}}>{r.map((c,j)=><td key={j} style={{padding:"10px 12px"}}>{c}</td>)}</tr>)}</tbody></table></div></Card>}
+  </div>;
+};
+
+// ── Meal Page ──
+const MealPage=()=><div>
+  <Sec icon="🍱" title="食事・生活記録" sub="AIカメラ＋センサーで自動記録"/>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:16}}>
+    <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>🍚 今日の給食</div>
+      <div style={{fontSize:13,color:C.g500,marginBottom:12}}>ごはん、鶏の唐揚げ、ほうれん草のおひたし、味噌汁</div>
+      {[{l:"ごはん",v:90,c:C.primary},{l:"主菜",v:80,c:C.info},{l:"副菜",v:70,c:C.accent},{l:"汁物",v:100,c:C.purple}].map((i,k)=>
+        <div key={k} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+          <span style={{color:C.g700}}>{i.l}</span><span style={{fontWeight:600,color:i.c}}>{i.v}%</span></div><Prog value={i.v} color={i.c}/></div>)}
+      <div style={{marginTop:8,fontSize:12,color:C.primary,fontWeight:600}}>🍽 おかわり: 1回</div></Card>
+    <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>🧼 手洗い記録</div>
+      <div style={{textAlign:"center",padding:"20px 0"}}><div style={{fontSize:48,fontWeight:800,color:C.info}}>5</div><div style={{fontSize:14,color:C.g500}}>回 / 本日</div></div>
+      {["登園後 8:12","外遊び後 11:05","給食前 11:45","おやつ前 15:00","トイレ後 14:30"].map((t,i)=>
+        <div key={i} style={{padding:"6px 0",borderBottom:"1px solid "+C.g100,fontSize:12,display:"flex",alignItems:"center",gap:6}}><span style={{color:C.primary}}>✓</span>{t}</div>)}</Card>
+    <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>🚻 トイレ記録</div>
+      <div style={{textAlign:"center",padding:"20px 0"}}><div style={{fontSize:48,fontWeight:800,color:C.purple}}>3</div><div style={{fontSize:14,color:C.g500}}>回 / 本日</div></div>
+      {["9:30 — おしっこ ✓","12:30 — おしっこ ✓","14:15 — おしっこ・うんち ✓"].map((t,i)=>
+        <div key={i} style={{padding:"6px 0",borderBottom:"1px solid "+C.g100,fontSize:12}}>{t}</div>)}
+      <div style={{marginTop:12,padding:"8px 12px",borderRadius:8,background:C.primaryLight,fontSize:11,color:C.primaryDark}}>✓ 排泄リズムは正常範囲です</div></Card></div>
+  <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📊 クラス全体の食事摂取率（今週）</div>
+    <MultiBarChart data={[{d:"月",ご:88,主:82,副:65,汁:90},{d:"火",ご:92,主:78,副:70,汁:88},{d:"水",ご:85,主:85,副:60,汁:92},{d:"木",ご:90,主:80,副:72,汁:95},{d:"金",ご:87,主:83,副:68,汁:91}]}
+      bars={[{key:"ご",color:C.primary,name:"ごはん"},{key:"主",color:C.info,name:"主菜"},{key:"副",color:C.accent,name:"副菜"},{key:"汁",color:C.purple,name:"汁物"}]} nameKey="d" height={200}/></Card></div>;
+
+// ── Vital Page with tabs ──
+const VitalPage=()=>{
+  const[selChild,setSelChild]=useState(CHILDREN[0].id);
+  const[tab,setTab]=useState("today");
+  const child=CHILDREN.find(c=>c.id===selChild);
+  const tData=useMemo(()=>genVitalToday(selChild),[selChild]);
+  const wData=useMemo(()=>genVitalWeek(selChild),[selChild]);
+  const mData=useMemo(()=>genVitalMonth(selChild),[selChild]);
+  const yData=useMemo(()=>genVitalYear(selChild),[selChild]);
+
+  return <div>
+    <Sec icon="💓" title="バイタルモニタリング" sub="ウェアラブルデバイス連携 — リアルタイム監視"/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
+      {CHILDREN.filter(c=>c.arrived&&c.hr).map(c=>
+        <Card key={c.id} onClick={()=>setSelChild(c.id)} style={{padding:14,border:selChild===c.id?"2px solid "+C.primary:"2px solid transparent"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontSize:24}}>{c.photo}</span>
+            <div><div style={{fontSize:13,fontWeight:600}}>{c.name}</div><div style={{fontSize:11,color:C.g500}}>{c.cls}</div></div></div>
+          <div style={{display:"flex",gap:8}}>
+            {[{l:"心拍数",v:c.hr,u:"bpm",bg:C.dangerLight,c:C.danger},{l:"SpO2",v:c.spo2,u:"%",bg:C.infoLight,c:C.info},{l:"体温",v:c.temp,u:"°C",bg:C.accentLight,c:C.accent}].map((x,i)=>
+              <div key={i} style={{flex:1,background:x.bg,borderRadius:8,padding:"6px 8px",textAlign:"center"}}>
+                <div style={{fontSize:9,color:C.g500}}>{x.l}</div><div style={{fontSize:16,fontWeight:700,color:x.c}}>{x.v}</div><div style={{fontSize:9,color:C.g500}}>{x.u}</div></div>)}</div>
+          <div style={{marginTop:6,fontSize:11,color:C.primary,fontWeight:600}}>✓ 正常</div>
+        </Card>)}</div>
+
+    <Card>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:15}}>📈 {child?child.name:""} — バイタル推移</div>
+        <TabBar tabs={[{id:"today",label:"今日"},{id:"week",label:"1週間"},{id:"month",label:"1ヶ月"},{id:"year",label:"1年間"}]} cur={tab} setCur={setTab}/></div>
+
+      {tab==="today"&&<div>
+        <LineChartSVG data={tData} nameKey="time" height={220} lines={[
+          {key:"hr",color:C.danger,name:"心拍数 (bpm)",fill:true,min:60,max:120}]}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
+          <div style={{padding:12,background:C.g50,borderRadius:10}}>
+            <div style={{fontSize:12,color:C.g500}}>心拍数（平均）</div>
+            <div style={{fontSize:24,fontWeight:700,color:C.danger}}>{Math.floor(tData.reduce((a,d)=>a+d.hr,0)/tData.length)} <span style={{fontSize:12}}>bpm</span></div></div>
+          <div style={{padding:12,background:C.g50,borderRadius:10}}>
+            <div style={{fontSize:12,color:C.g500}}>SpO2（平均）</div>
+            <div style={{fontSize:24,fontWeight:700,color:C.info}}>{Math.floor(tData.reduce((a,d)=>a+d.spo2,0)/tData.length)} <span style={{fontSize:12}}>%</span></div></div></div>
+        <div style={{marginTop:12,padding:"8px 12px",borderRadius:8,background:C.primaryLight,fontSize:12,color:C.primaryDark}}>😴 13:00〜15:00 お昼寝中 — 呼吸・心拍ともに安定。異常検知なし。</div>
+      </div>}
+
+      {tab==="week"&&<div>
+        <LineChartSVG data={wData} nameKey="date" height={220} lines={[
+          {key:"hrAvg",color:C.danger,name:"心拍数",fill:true,min:60,max:110},
+          {key:"sleepScore",color:C.purple,name:"睡眠スコア",min:50,max:100}]}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginTop:12}}>
+          {wData.map((d,i)=><div key={i} style={{padding:10,background:C.g50,borderRadius:8,textAlign:"center"}}>
+            <div style={{fontSize:11,color:C.g500}}>{d.date}({d.day})</div>
+            <div style={{fontSize:16,fontWeight:700,color:d.sleepScore>=80?C.primary:d.sleepScore>=65?C.accent:C.danger}}>{d.sleepScore}</div>
+            <div style={{fontSize:10,color:C.g500}}>睡眠スコア</div></div>)}
+        </div></div>}
+
+      {tab==="month"&&<div>
+        <LineChartSVG data={mData} nameKey="date" height={240} showDots={false} lines={[
+          {key:"hrAvg",color:C.danger,name:"心拍数",fill:true,min:60,max:110},
+          {key:"sleepScore",color:C.purple,name:"睡眠スコア",min:50,max:100}]}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginTop:12}}>
+          <div style={{padding:12,background:C.g50,borderRadius:10,textAlign:"center"}}>
+            <div style={{fontSize:12,color:C.g500}}>平均心拍数</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.danger}}>{Math.floor(mData.reduce((a,d)=>a+d.hrAvg,0)/mData.length)} bpm</div></div>
+          <div style={{padding:12,background:C.g50,borderRadius:10,textAlign:"center"}}>
+            <div style={{fontSize:12,color:C.g500}}>平均SpO2</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.info}}>{(mData.reduce((a,d)=>a+d.spo2Avg,0)/mData.length).toFixed(1)}%</div></div>
+          <div style={{padding:12,background:C.g50,borderRadius:10,textAlign:"center"}}>
+            <div style={{fontSize:12,color:C.g500}}>平均睡眠スコア</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.purple}}>{Math.floor(mData.reduce((a,d)=>a+d.sleepScore,0)/mData.length)}</div></div>
+        </div></div>}
+
+      {tab==="year"&&<div>
+        <LineChartSVG data={yData} nameKey="month" height={240} lines={[
+          {key:"hrAvg",color:C.danger,name:"心拍数",fill:true,min:60,max:110},
+          {key:"sleepScore",color:C.purple,name:"睡眠スコア",min:50,max:100}]}/>
+        <div style={{marginTop:12,padding:"12px 16px",borderRadius:10,background:C.primaryLight}}>
+          <AITag/> <span style={{fontSize:12,color:C.primaryDark,marginLeft:8}}>1年間を通じてバイタルデータは安定しており、成長に伴う心拍数の安定化傾向が見られます。睡眠スコアは季節変動がありますが概ね良好です。</span>
+        </div></div>}
+    </Card></div>;
+};
+
+// ── Growth Page ──
+const GrowthPage=()=><div>
+  <Sec icon="📈" title="成長管理・アルバム" sub="身体測定 ＋ 写真自動紐付け ＋ 思い出アルバム"/>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+    <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📏 田中ゆうとくん — 成長曲線</div>
+      <LineChartSVG data={GROWTH} nameKey="m" height={240} lines={[{key:"h",color:C.info,name:"身長(cm)",min:95,max:108},{key:"w",color:C.accent,name:"体重(kg)",min:14,max:18}]}/>
+      <div style={{marginTop:8,padding:"8px 12px",borderRadius:8,background:C.primaryLight,fontSize:12,color:C.primaryDark}}>
+        <AITag/> 成長曲線は標準範囲内で順調です。身長+5.7cm / 体重+1.7kg</div></Card>
+    <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>🎯 できるようになったこと</div>
+      <div style={{maxHeight:300,overflow:"auto"}}>
+        {[{d:"2/14",t:"初めて鉄棒の前回りができた！",i:"🤸"},{d:"2/10",t:"自分の名前をひらがなで書けた",i:"✏️"},{d:"1/28",t:"お友達におもちゃを「どうぞ」できた",i:"🤝"},{d:"1/15",t:"ボタンを一人で留められた",i:"👕"},{d:"12/20",t:"発表会で大きな声でセリフが言えた",i:"🎤"},{d:"12/5",t:"箸を使って食べられるようになった",i:"🥢"},{d:"11/18",t:"トイレを一人でできるようになった",i:"🚻"}].map((m,i)=>
+          <div key={i} style={{display:"flex",gap:10,padding:"10px 0",borderBottom:"1px solid "+C.g100}}>
+            <div style={{fontSize:24}}>{m.i}</div><div><div style={{fontSize:13,fontWeight:600,color:C.g900}}>{m.t}</div><div style={{fontSize:11,color:C.g500}}>{m.d}</div></div></div>)}</div></Card></div>
+  <Card><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+    <div><div style={{fontWeight:700,fontSize:15}}>📸 思い出アルバム — AI自動選定</div>
+      <div style={{fontSize:12,color:C.g500,marginTop:2}}>顔認識で自動紐付け → ベストショットをAIが選定</div></div>
+    <div style={{display:"flex",gap:8}}><AITag/><Btn v="primary" sz="sm">🖨 アルバム出力</Btn></div></div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10}}>
+      {[{l:"入園式",i:"🌸",m:"4月",bg:"#FFE4E1"},{l:"遠足",i:"🎒",m:"5月",bg:"#E0FFE0"},{l:"プール",i:"🏊",m:"7月",bg:"#E0F0FF"},{l:"夏祭り",i:"🎆",m:"7月",bg:"#FFF0E0"},{l:"運動会",i:"🏃",m:"10月",bg:"#FFE4C4"},{l:"芋掘り",i:"🍠",m:"10月",bg:"#F5E6D3"},{l:"ハロウィン",i:"🎃",m:"10月",bg:"#FFF3E0"},{l:"発表会",i:"🎭",m:"12月",bg:"#EDE9FE"},{l:"クリスマス",i:"🎄",m:"12月",bg:"#E8F5E9"},{l:"お正月",i:"🎍",m:"1月",bg:"#FFF8E1"},{l:"節分",i:"👹",m:"2月",bg:"#FFEBEE"},{l:"お絵描き",i:"🎨",m:"日常",bg:"#F3E5F5"}].map((p,i)=>
+        <div key={i} style={{background:"linear-gradient(135deg,"+p.bg+",#fff)",borderRadius:10,padding:12,textAlign:"center",border:"1px solid "+C.g200,boxShadow:"0 2px 6px rgba(0,0,0,.05)"}}>
+          <div style={{fontSize:32}}>{p.i}</div><div style={{fontSize:11,fontWeight:600,marginTop:4}}>{p.l}</div><div style={{fontSize:10,color:C.g500}}>{p.m}</div></div>)}</div></Card></div>;
+
+// ── Parent Views ──
+const ParentHome=({userName})=><div style={{maxWidth:420,margin:"0 auto"}}>
+  <Card style={{background:"linear-gradient(135deg,#064E3B,#065F46)",color:"#fff",marginBottom:16}}>
+    <div style={{display:"flex",alignItems:"center",gap:12}}>
+      <div style={{fontSize:48}}>🧒</div>
+      <div>{userName&&<div style={{fontSize:12,opacity:.7,marginBottom:2}}>{userName}さん</div>}<div style={{fontSize:20,fontWeight:700}}>田中 ゆうとくん</div><div style={{fontSize:13,opacity:.8}}>ひまわり組（4歳児）</div>
+        <div style={{marginTop:4}}><span style={{padding:"3px 10px",borderRadius:20,background:"rgba(52,211,153,.3)",fontSize:12,fontWeight:600}}>✓ 登園済 8:12</span></div></div></div></Card>
+  <Card style={{marginBottom:12}}><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📬 今日の連絡帳</div>
+    <div style={{fontSize:13,lineHeight:1.8,color:C.g700}}>今日のゆうとくんは元気いっぱいに過ごしました🌟<br/><br/>朝はブロックで大きなお城を作りました。お絵描きではご家族の絵を描いてくれましたよ。<br/><br/>お外では佐藤あおいちゃんと砂場で遊んでいました😊</div>
+    <div style={{display:"flex",gap:8,marginTop:12}}>
+      {[{e:"🎨",bg:"#FFE4C4"},{e:"🏗",bg:"#B0E0E6"},{e:"⛱",bg:"#F0E68C"}].map((x,i)=>
+        <div key={i} style={{width:80,height:80,borderRadius:10,background:"linear-gradient(135deg,"+x.bg+",#fff)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,boxShadow:"0 2px 6px rgba(0,0,0,.08)"}}>{x.e}</div>)}</div></Card>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+    {[{l:"🍚 給食",v:"ほぼ完食",s:"おかわり1回",c:C.primary},{l:"😴 お昼寝",v:"13:05〜14:50",s:"ぐっすり眠れました",c:C.info},{l:"💓 バイタル",v:"全て正常",s:"HR 92 / SpO2 98%",c:C.primary},{l:"🧼 手洗い",v:"5回",s:"しっかりできました",c:C.purple}].map((k,i)=>
+      <Card key={i} style={{padding:14}}><div style={{fontSize:12,color:C.g500}}>{k.l}</div><div style={{fontSize:16,fontWeight:700,color:k.c,marginTop:4}}>{k.v}</div><div style={{fontSize:11,color:C.g500}}>{k.s}</div></Card>)}</div>
+  <Card><div style={{fontWeight:700,fontSize:15,marginBottom:8}}>📅 今週のお知らせ</div>
+    {[{t:"2/21(金) 作品展",i:"🎨"},{t:"3/3(火) ひな祭り会",i:"🎎"}].map((n,i)=>
+      <div key={i} style={{padding:"8px 0",borderBottom:"1px solid "+C.g100,fontSize:13,display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:18}}>{n.i}</span>{n.t}</div>)}</Card></div>;
+
+const ParentTimeline=()=><div style={{maxWidth:420,margin:"0 auto"}}>
+  <Sec icon="📷" title="今日のようす" sub="AIが自動で記録した活動タイムライン"/>
+  {ACTIVITIES.slice(0,7).map((a,i)=><Card key={i} style={{marginBottom:10}}>
+    <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{fontSize:28}}>{a.icon}</div>
+      <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600}}>{a.act}</div><div style={{fontSize:11,color:C.g500}}>{a.time}</div></div></div></Card>)}</div>;
+
+const ParentGrowth=()=><div style={{maxWidth:420,margin:"0 auto"}}>
+  <Sec icon="📈" title="成長記録" sub="ゆうとくんの成長の軌跡"/>
+  <Card style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📏 身長・体重の推移</div>
+    <LineChartSVG data={GROWTH} nameKey="m" height={220} lines={[{key:"h",color:C.info,name:"身長(cm)",min:95,max:108},{key:"w",color:C.accent,name:"体重(kg)",min:14,max:18}]}/></Card>
+  <Card><div style={{fontWeight:700,fontSize:15,marginBottom:8}}>🎯 最近できるようになったこと</div>
+    {[{d:"2/14",t:"初めて鉄棒の前回りができた！🤸"},{d:"2/10",t:"自分の名前をひらがなで書けた ✏️"},{d:"1/28",t:"お友達に「どうぞ」ができた 🤝"}].map((m,i)=>
+      <div key={i} style={{padding:"10px 0",borderBottom:"1px solid "+C.g100,fontSize:13}}><div style={{fontWeight:600}}>{m.t}</div><div style={{fontSize:11,color:C.g500}}>{m.d}</div></div>)}</Card></div>;
+
+// ── Director Views ──
+const DirDash=({userName})=><div>
+  <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,color:C.g900,margin:0}}>{userName?userName+"さん、":""}園長ダッシュボード</h1>
+    <p style={{color:C.g500,margin:"4px 0 0",fontSize:14}}>2026年2月17日（火）｜ひまわり保育園</p></div>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+    {[{l:"在籍園児数",v:"87名",s:"定員90名（96.7%）",c:C.primary},{l:"本日出席",v:"82名",s:"出席率94.3%",c:C.info},{l:"職員出勤",v:"14名",s:"配置充足 ✓",c:C.purple},{l:"AI記録完了",v:"96%",s:"残り3名 承認待ち",c:C.accent}].map((k,i)=>
+      <Card key={i}><div style={{fontSize:12,color:C.g500}}>{k.l}</div><div style={{fontSize:28,fontWeight:800,color:k.c,marginTop:4}}>{k.v}</div><div style={{fontSize:11,color:C.g500,marginTop:2}}>{k.s}</div></Card>)}</div>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+    <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📊 今週の出席推移</div>
+      <SimpleBarChart data={[{d:"月",c:84},{d:"火",c:82},{d:"水",c:80},{d:"木",c:85},{d:"金",c:78}]} dataKey="c" nameKey="d" color={C.primary} height={220} domain={[60,90]} unit="名"/></Card>
+    <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>⏱ AI業務効率化の効果</div>
+      {[{l:"日誌作成時間",b:"45分/日",a:"5分/日",s:"89%削減"},{l:"連絡帳作成",b:"60分/日",a:"8分/日",s:"87%削減"},{l:"年間計画策定",b:"2週間",a:"2時間",s:"98%削減"},{l:"午睡チェック",b:"常時人手",a:"自動監視",s:"人手不要"}].map((e,i)=>
+        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid "+C.g100}}>
+          <div style={{fontSize:13,fontWeight:600,flex:1}}>{e.l}</div><div style={{fontSize:12,color:C.g500,flex:1,textAlign:"center"}}>{e.b} → {e.a}</div><Badge color={C.primary}>{e.s}</Badge></div>)}</Card></div>
+  <Card><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+    <div style={{fontWeight:700,fontSize:15}}>💡 AIインサイト</div><AITag/></div>
+    {[{i:"📈",t:"今月の出席率は94.3%で昨年同月比+2.1%です。"},{i:"👩‍🏫",t:"3/20卒園式の週は追加人員が必要です。"},{i:"🍱",t:"副菜の摂取率が低下傾向。献立の見直しを検討ください。"},{i:"💰",t:"延長保育料 前月比+8%。キャッシュレス利用率72%に上昇。"}].map((x,i)=>
+      <div key={i} style={{padding:"10px 0",borderBottom:"1px solid "+C.g100,display:"flex",gap:10,fontSize:13}}><span style={{fontSize:20}}>{x.i}</span><span style={{color:C.g700}}>{x.t}</span></div>)}</Card></div>;
+
+const DirStaff=()=><div>
+  <Sec icon="👩‍🏫" title="職員管理" sub="シフト管理・AI最適配置"/>
+  <Card><div style={{fontWeight:700,fontSize:15,marginBottom:12}}>本日の職員配置</div>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+      <thead><tr style={{background:C.g50}}>{["名前","担当","シフト","状態"].map((h,i)=><th key={i} style={{padding:"10px 12px",textAlign:"left",borderBottom:"2px solid "+C.g200}}>{h}</th>)}</tr></thead>
+      <tbody>{[["山田 花子","ひまわり組","8:00〜17:00","勤務中"],["鈴木 太郎","さくら組","8:00〜17:00","勤務中"],["佐藤 美咲","たんぽぽ組","8:30〜17:30","勤務中"],["田村 直美","フリー","9:00〜18:00","勤務中"],["高橋 恵","給食","7:00〜16:00","勤務中"]].map((r,i)=>
+        <tr key={i} style={{borderBottom:"1px solid "+C.g100}}>{r.map((c,j)=><td key={j} style={{padding:"10px 12px"}}>{j===3?<Badge color={C.primary}>{c}</Badge>:c}</td>)}</tr>)}</tbody></table></Card></div>;
+
+// ── Main App ──
+function App(){
+  const[step,setStep]=useState("roleSelect"); // roleSelect -> login -> app
+  const[role,setRole]=useState(null);
+  const[user,setUser]=useState(null);
+  const[page,setPage]=useState("dashboard");
+
+  const handleRoleSelect=(r)=>{setRole(r);setStep("login")};
+  const handleLogin=(u)=>{setUser(u);setStep("app");
+    setPage(role==="teacher"?"dashboard":role==="parent"?"p_home":"d_dashboard")};
+  const handleLogout=()=>{setStep("roleSelect");setRole(null);setUser(null);setPage("dashboard")};
+  const switchRole=(r)=>{setRole(r);setPage(r==="teacher"?"dashboard":r==="parent"?"p_home":"d_dashboard")};
+
+  if(step==="roleSelect")return <RoleSelectScreen onSelectRole={handleRoleSelect}/>;
+  if(step==="login")return <LoginScreen role={role} onLogin={handleLogin} onBack={()=>setStep("roleSelect")}/>;
+
+  const un=user?user.name:"";
+  const renderPage=()=>{
+    switch(page){
+      case "dashboard":return <TeacherDash userName={un}/>;case "attendance":return <AttPage/>;
+      case "journal":return <JournalPage/>;case "plan":return <PlanPage/>;
+      case "event":return <EventPage/>;case "meal":return <MealPage/>;
+      case "vital":return <VitalPage/>;case "growth":return <GrowthPage/>;
+      case "p_home":return <ParentHome userName={un}/>;case "p_timeline":return <ParentTimeline/>;
+      case "p_growth":return <ParentGrowth/>;case "d_dashboard":return <DirDash userName={un}/>;
+      case "d_staff":return <DirStaff/>;case "d_plan":return <PlanPage/>;
+      default:return <TeacherDash userName={un}/>;
+    }
+  };
+
+  return <div style={{display:"flex",minHeight:"100vh",background:C.g50}}>
+    <Sidebar role={role} cur={page} setPage={setPage} onLogout={handleLogout} userName={user?user.name:""}/>
+    <div style={{flex:1,padding:28,overflowY:"auto",maxHeight:"100vh"}}>
+      <div style={{maxWidth:1200,margin:"0 auto"}}>
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16,gap:8}}>
+          {role!=="teacher"&&<Btn v="secondary" sz="sm" onClick={()=>switchRole("teacher")}>👩‍🏫 保育士</Btn>}
+          {role!=="director"&&<Btn v="secondary" sz="sm" onClick={()=>switchRole("director")}>👨‍💼 園長</Btn>}
+          {role!=="parent"&&<Btn v="secondary" sz="sm" onClick={()=>switchRole("parent")}>👨‍👩‍👧 保護者</Btn>}
+        </div>
+        {renderPage()}
+      </div></div></div>;
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+<script>
+window.onerror=function(msg){
+  var el=document.getElementById('lf');
+  if(el){el.style.display='flex';el.innerHTML='<div style="text-align:center;max-width:500px;padding:20px"><div style="font-size:48px;margin-bottom:16px">⚠️</div><h2>読み込みエラー</h2><p style="margin-top:8px;opacity:.8">インターネット接続を確認してください。</p><p style="font-size:11px;opacity:.4;margin-top:12px">'+msg+'</p></div>'}
+  return true};
+</script>
+</body>
+</html>
