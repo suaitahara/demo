@@ -40,6 +40,7 @@ document.getElementById('lf').style.display='none';
 
 const USERS=[
   {email:"s_tahara@skillupai.com",name:"田原 眞一",org:"スキルアップNeXt"},
+  {email:"t_tanaka@skillupai.com",name:"田中",org:"スキルアップNeXt"},
   {email:"katokato666@yahoo.co.jp",name:"加藤",org:""},
   {email:"wataru.yamaguchi.dp@fujifilm.com",name:"山口 渉",org:"FBIJ"},
   {email:"tetsuya.kanome.wz@fujifilm.com",name:"鹿目 哲也",org:"FBIJ"},
@@ -298,7 +299,13 @@ const LoginScreen=({role,onLogin,onBack})=>{
   const rl=role==="teacher"?"保育士":role==="parent"?"保護者":"園長・管理者";
   const ri=role==="teacher"?"👩‍🏫":role==="parent"?"👨‍👩‍👧":"👨‍💼";
   const handleSubmit=e=>{e.preventDefault();
-    const user=USERS.find(u=>u.email===email);
+    let user=USERS.find(u=>u.email===email);
+    // 正規表現で @skillupai.com のメールアドレスをチェック
+    const skillupaiRegex=/^[a-zA-Z0-9._\-+]+@skillupai\.com$/i;
+    if(!user && skillupaiRegex.test(email) && pw===PW){
+      const name=email.split("@")[0]; // izawa@skillupai.com -> izawa
+      user={email,name,org:"スキルアップNeXt"};
+    }
     if(user&&pw===PW){setError("");onLogin(user)}
     else{setError("メールアドレスまたはパスワードが正しくありません");setShaking(true);setTimeout(()=>setShaking(false),500)}};
   return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#064E3B 0%,#065F46 40%,#047857 100%)"}}>
